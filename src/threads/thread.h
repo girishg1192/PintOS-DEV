@@ -88,7 +88,9 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int old_priority;                   /* Save old priority in case of donation */
     struct list_elem allelem;           /* List element for all threads list. */
+    struct lock *acquired_lock;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -137,5 +139,15 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+static bool
+priority_more (struct list_elem *al,struct list_elem *bl,
+    void *aux UNUSED) 
+{
+  struct thread *a = list_entry(al, struct thread, elem);
+  struct thread *b = list_entry(bl, struct thread, elem);
+
+  return a->priority > b->priority;
+}
 
 #endif /* threads/thread.h */

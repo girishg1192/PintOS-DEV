@@ -232,13 +232,30 @@ void
 thread_unblock (struct thread *t) 
 {
   enum intr_level old_level;
+  struct thread *current=thread_current();
 
   ASSERT (is_thread (t));
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+//  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, priority_more, NULL);
   t->status = THREAD_READY;
+
+  //Pre-emptive block if new thread has greater priority yield current thread
+  //thread_yield will put the current thread back in running queue
+  //As the new thread will have higher priority, the new thread will be 
+  //scheduled first
+
+  if(current!=idle_thread && current->priority < t->priority)
+  {
+//    printf("thread.c preempting thread %s %s\n", thread_current()->name, t->name);
+//    printf("thread.c next thread to run is %s\n",next_thread_to_run()->name);
+//    printf("preempting\n");
+    thread_yield();
+  }
+  //End of preemption.
+
   intr_set_level (old_level);
 }
 
@@ -256,7 +273,6 @@ struct thread *
 thread_current (void) 
 {
   struct thread *t = running_thread ();
-  
   /* Make sure T is really a thread.
      If either of these assertions fire, then your thread may
      have overflowed its stack.  Each thread has less than 4 kB
@@ -308,7 +324,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+//    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, priority_more, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -335,7 +352,12 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  enum intr_level old_level;
+  old_level = intr_disable ();
+  thread_current()->priority = new_priority;
+//  printf("thread.c set priority of thread %s = %d\n", thread_current()->name, new_priority);
+  thread_yield();
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -462,6 +484,8 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->old_priority = priority;
+  t->old_priority=priority;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -494,6 +518,19 @@ next_thread_to_run (void)
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+}
+// Returns priority of next scheduled thread, for priority implementation
+// this is the max priority
+void
+preempt_thread(int new_priority)
+{
+  int priority_next;
+  if (list_empty (&ready_list))
+    priority_next = idle_thread->priority;
+  else
+    priority_next = (list_entry(list_begin(&ready_list), struct thread, elem))->priority;
+  if(priority_next > thread_current()->priority)
+    thread_yield();
 }
 
 /* Completes a thread switch by activating the new thread's page
