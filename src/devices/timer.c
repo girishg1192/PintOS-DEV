@@ -19,6 +19,7 @@
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
+struct list wait_list;
 
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -30,11 +31,27 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+//Blocking method to wait for Semaphore till timer for current thread expires
+void thread_sleep (int64_t wakeTime);
+
+//Helper function for list_insert_ordered
+static bool
+wait_time_less (struct list_elem *al,struct list_elem *bl,
+    void *aux UNUSED) 
+{
+  struct wait_list *a = list_entry(al, struct wait_list, elem);
+  struct wait_list *b = list_entry(bl, struct wait_list, elem);
+
+  return a->value < b->value;
+}
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
 timer_init (void) 
 {
+  list_init(&wait_list);   //Girish Added list init
+  lock_init(&critical);    //Lock for critical regions accession wait_list
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -90,10 +107,11 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-
+  int64_t wait_till = start+ticks;
+//  printf("timer.c!! start=%"PRId64", ticks=%"PRId64", wait_till=%"PRId64"\n", start, ticks, wait_till);
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  if(wait_till>start)
+    thread_sleep(wait_till);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -171,6 +189,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  wake_sleeping();   // Wake sleeping threads scheduled at ticks
   thread_tick ();
 }
 
@@ -206,6 +225,61 @@ busy_wait (int64_t loops)
   while (loops-- > 0)
     barrier ();
 }
+// Alarm Avoiding busy waiting
+// all waiting threads reside in wait_list, to put current
+// thread to sleep add to wait_list and wait for semaphore to be
+// released by timer interrupt
+void thread_sleep(int64_t wakeTime)
+{
+  struct wait_list *wait_node=(struct wait_list *)malloc(sizeof(struct wait_list));
+  ASSERT(wait_node!=NULL);
+  
+//  printf("timer.c:wait_node= 0x%x \n", wait_node);
+  sema_init(&wait_node->sema,0);
+  
+//  printf("Timer: name=%s \n", thread_name());
+//  printf ("Timer: Sleep till %"PRId64"\n ", wakeTime);
+
+
+  wait_node->value=wakeTime;
+//  printf("timer.c thread enter critical %s\n", thread_current()->name);
+  lock_acquire(&critical);
+//  printf("timer.c enter critical\n");
+  list_insert_ordered(&wait_list, &wait_node->elem, wait_time_less, NULL);
+  lock_release(&critical);
+//  list_push_back(&wait_list, &wait_node->elem);
+  sema_down(&wait_node->sema);
+
+//  printf("timer.c thread %s woke up at %"PRId64"!\n", thread_name(), ticks);
+
+  list_remove(&wait_node->elem);
+  free(wait_node);
+
+}
+
+void wake_sleeping()
+{
+  //Start of wake up routine
+  struct list_elem *looper;
+  struct wait_list *wait_ticks;
+
+//  lock_acquire(&critical);
+  looper      = list_begin(&wait_list);
+//  lock_release(&critical);
+
+  wait_ticks  = list_entry(looper, struct wait_list, elem);
+
+  while(wait_ticks->value==ticks)
+  {
+//      printf("timer.c waking up sleeping thread sleeping till %"PRId64"\n", ticks);
+      sema_up(&wait_ticks->sema);
+      looper    = list_next(looper);
+      wait_ticks= list_entry(looper, struct wait_list, elem);
+  }
+  //End of Wake
+}
+
+// End of sleep routines
 
 /* Sleep for approximately NUM/DENOM seconds. */
 static void
