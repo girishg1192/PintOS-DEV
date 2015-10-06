@@ -22,7 +22,7 @@ lib/user_SRC += lib/user/console.c	# Console code.
 
 LIB_OBJ = $(patsubst %.c,%.o,$(patsubst %.S,%.o,$(lib_SRC) $(lib/user_SRC)))
 LIB_DEP = $(patsubst %.o,%.d,$(LIB_OBJ))
-LIB = lib/user/entry.o $(LIB_OBJ)
+LIB = lib/user/entry.o libc.a
 
 PROGS_SRC = $(foreach prog,$(PROGS),$($(prog)_SRC))
 PROGS_OBJ = $(patsubst %.c,%.o,$(patsubst %.S,%.o,$(PROGS_SRC)))
@@ -37,6 +37,11 @@ $(1): $$($(1)_OBJ) $$(LIB) $$(LDSCRIPT)
 endef
 
 $(foreach prog,$(PROGS),$(eval $(call TEMPLATE,$(prog))))
+
+libc.a: $(LIB_OBJ)
+	rm -f $@
+	ar r $@ $^
+	ranlib $@
 
 clean::
 	rm -f $(PROGS) $(PROGS_OBJ) $(PROGS_DEP)

@@ -3,6 +3,7 @@
    that it is valid. */
 
 #include <stdio.h>
+#include "debug.h"
 #include "tests/threads/tests.h"
 #include "threads/init.h"
 #include "threads/malloc.h"
@@ -86,7 +87,10 @@ sleeper (void *test_)
 
   for (i = 1; i <= test->iterations; i++) 
     {
+//      printf("alar-sim %d\n", test->start);
       int64_t sleep_until = test->start + i * 10;
+//      printf("alarm-simultaneous.c!! sleep_until=%d, timer_ticks=%d, test_start=%d\n", sleep_until, timer_ticks(), test->start);
+//      printf("alarm-simultaneous.c i=%d\n",i);
       timer_sleep (sleep_until - timer_ticks ());
       *test->output_pos++ = timer_ticks () - test->start;
       thread_yield ();

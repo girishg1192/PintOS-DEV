@@ -1,0 +1,85 @@
+diff --git a/thread.c b/thread.c1
+index 87f22b8..f1c1ee3 100644
+--- a/thread.c
++++ b/thread.c1
+@@ -14,7 +14,7 @@
+ #ifdef USERPROG
+ #include "userprog/process.h"
+ #endif
+-
++ 
+ /* Random value for struct thread's `magic' member.
+    Used to detect stack overflow.  See the big comment at the top
+    of thread.h for details. */
+@@ -84,6 +84,18 @@ static tid_t allocate_tid (void);
+ 
+    It is not safe to call thread_current() until this function
+    finishes. */
++static bool
++value_less (const struct list_elem *a_, const struct list_elem *b_,
++    void *aux UNUSED) 
++{
++  const struct thread *a = list_entry (a_, struct thread, elem);
++  const struct thread *b = list_entry (b_, struct thread, elem);
++
++  return a->priority < b->priority;
++}
+ void
+ thread_init (void) 
+ {
+@@ -237,8 +249,25 @@ thread_unblock (struct thread *t)
+ 
+   old_level = intr_disable ();
+   ASSERT (t->status == THREAD_BLOCKED);
+-  list_push_back (&ready_list, &t->elem);
++  list_insert_ordered(&ready_list, &t->elem, priority_more, NULL);
+   t->status = THREAD_READY;
++
++  //Pre-emptive block if new thread has greater priority yield current thread
++  //thread_yield will put the current thread back in running queue
++  //As the new thread will have higher priority, the new thread will be 
++  //scheduled first
++  /*
++  printf("thread enter %s",t->name);
++  if(thread_current()!=idle_thread && thread_current()->priority < t->priority)
++  {
++    printf("thread.c preempting thread %s %s\n", thread_current()->name, t->name);
++    printf("thread.c next thread to run is %s\n",next_thread_to_run()->name);
++    thread_yield();
++  }
++  //End of preemption.
++  */
++
++
+   intr_set_level (old_level);
+ }
+ 
+@@ -308,7 +337,9 @@ thread_yield (void)
+ 
+   old_level = intr_disable ();
+   if (cur != idle_thread) 
+-    list_push_back (&ready_list, &cur->elem);
++//    list_push_back (&ready_list, &cur->elem);
++    list_insert_ordered(&ready_list, &cur->elem, priority_more, NULL);
++  printf("yield): current put to ready\n");
+   cur->status = THREAD_READY;
+   schedule ();
+   intr_set_level (old_level);
+@@ -336,6 +367,8 @@ void
+ thread_set_priority (int new_priority) 
+ {
+   thread_current ()->priority = new_priority;
++  printf("thread.c: tid %d priority changed to %d\n",thread_current()->tid, new_priority);
++  thread_yield();
+ }
+ 
+ /* Returns the current thread's priority. */
+@@ -559,7 +592,7 @@ schedule (void)
+   ASSERT (intr_get_level () == INTR_OFF);
+   ASSERT (cur->status != THREAD_RUNNING);
+   ASSERT (is_thread (next));
+-
++  printf("schedule current=%s next=%s\n", cur->name, next->name);
+   if (cur != next)
+     prev = switch_threads (cur, next);
+   thread_schedule_tail (prev);
