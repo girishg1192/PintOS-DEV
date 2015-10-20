@@ -355,7 +355,16 @@ thread_set_priority (int new_priority)
 {
   enum intr_level old_level;
   old_level = intr_disable ();
-  thread_current()->priority = new_priority;
+  struct thread *t = thread_current();
+  if(new_priority < t->priority && !list_empty(&t->list_donors))
+  {
+    t->old_priority = new_priority;
+  }
+  else
+  {
+    t->priority = new_priority;
+    t->old_priority = new_priority;
+  }
 //  printf("thread.c set priority of thread %s = %d\n", thread_current()->name, new_priority);
 //  TODO fix thread_set_priority
   thread_yield();
