@@ -42,6 +42,9 @@
    - up or "V": increment the value (and wake up one waiting
      thread, if any). */
 
+  static bool
+cond_max_priority (struct list_elem *al,struct list_elem *bl,
+    void *aux UNUSED);
 void
 sema_init (struct semaphore *sema, unsigned value) 
 {
@@ -63,7 +66,6 @@ sema_down (struct semaphore *sema)
 {
   enum intr_level old_level;
 
-  struct thread *waiter=NULL;
   ASSERT (sema != NULL);
   ASSERT (!intr_context ());
   old_level = intr_disable ();
@@ -257,7 +259,6 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
-  enum intr_level old_level;
   struct list_elem *e=NULL, *check=NULL;
   struct thread *next_donor = NULL, *iter=NULL, *ptr=NULL;
   struct thread *t = thread_current();
@@ -384,11 +385,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
+  struct semaphore_elem *elem;
 
   if (!list_empty (&cond->waiters)) 
   {
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-          struct semaphore_elem, elem)->semaphore);
+    elem = list_min(&cond->waiters, cond_max_priority, NULL);
+    list_remove(elem);
+    sema_up(&elem->semaphore);
   }
 }
 
@@ -406,4 +409,26 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+static bool
+cond_max_priority (struct list_elem *al,struct list_elem *bl,
+    void *aux UNUSED) 
+{
+  struct semaphore *a = &list_entry(al, struct semaphore_elem, elem)->semaphore;
+  struct semaphore *b = &list_entry(bl, struct semaphore_elem, elem)->semaphore;
+  struct thread *a_=NULL,*b_=NULL;
+  
+  if (!list_empty (&a->waiters)) 
+  {
+    a_ = list_entry(list_min(&a->waiters, priority_more, NULL), struct thread, elem);
+  }
+  else return false;
+  if (!list_empty (&b->waiters)) 
+  {
+    b_ = list_entry(list_min(&b->waiters, priority_more, NULL), struct thread, elem);
+  }
+  else return true;
+  
+  return a_->priority > b_->priority;
 }
