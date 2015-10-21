@@ -11,6 +11,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -133,6 +135,22 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  if(thread_mlfqs)
+  {
+    if(timer_ticks() % TIMER_FREQ == 0)
+    {
+      load_avg_calc();
+      recent_cpu_calc();
+    }
+    if(t != idle_thread)
+      t->recent_cpu = add_to_fp(t->recent_cpu, 1);
+    if(timer_ticks() % 4 == 0)
+    {
+      thread_recalculate_priority_all();
+    }
+  }
+  
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -382,15 +400,23 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  if(!thread_mlfqs) return;
+  thread_current()->nice = nice;
+  thread_recalculate_priority(thread_current());
+  if(!list_empty(&ready_list))
+    if(thread_current()->priority < list_entry(list_min(&ready_list, priority_more, NULL), struct thread, elem)->priority)
+  {
+      thread_yield();
+  }
+
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int nice = thread_current()->nice;
+  return nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -398,7 +424,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return fp_to_int(mul_fp_int(load_avg,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -406,7 +432,8 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  int32_t recent_cpu = thread_current()->recent_cpu;
+  return fp_to_int(mul_fp_int(recent_cpu,100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -496,6 +523,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->old_priority = priority;
+  t->nice=0;
+  t->recent_cpu=0;
   t->magic = THREAD_MAGIC;
   list_init(&t->list_donors);
   old_level = intr_disable ();
@@ -625,7 +654,49 @@ allocate_tid (void)
 
   return tid;
 }
-
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+void thread_recalculate_priority_all()
+{
+  struct list_elem *e;
+  for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+    thread_recalculate_priority(list_entry(e, struct thread, allelem));
+}
+
+void thread_recalculate_priority(struct thread *t)
+{
+  int32_t temp;
+  struct list_elem *thread;
+  temp = div_fp_int(int_to_fp(t->recent_cpu),4) + div_fp_int(int_to_fp(t->nice),2);
+  temp = PRI_MAX - fp_to_int(temp);
+  if(temp < PRI_MIN)
+    temp = PRI_MIN;
+  if(temp > PRI_MAX)
+    temp = PRI_MAX;
+  t->priority = temp;
+}
+
+void recent_cpu_calc()
+{
+  struct list_elem *e;
+  struct thread *t;
+  for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+  {
+    t = list_entry(e, struct thread, allelem);
+    int32_t num = mul_fp_int(load_avg,2);
+    int32_t denominator = add_to_fp(num,1);
+    int32_t a = div_fp_fp(num,denominator);
+    int32_t recent_cpu = mul_fp_int(t->recent_cpu, a);
+    t->recent_cpu = add_to_fp(recent_cpu, t->nice);
+  }
+}
+
+void load_avg_calc()
+{
+  int ready_threads = list_size(&ready_list);
+  if(thread_current != idle_thread)
+    ready_threads++;
+  load_avg = mul_fp_fp(div_fp_int(int_to_fp(59),60),load_avg) + mul_fp_fp(div_fp_int(int_to_fp(1),60),int_to_fp(ready_threads));
+
+}
