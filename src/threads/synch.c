@@ -72,7 +72,6 @@ sema_down (struct semaphore *sema)
 
   while (sema->value == 0) 
     {
-//      printf("%s sema down\n", thread_current()->name);
       list_insert_ordered(&sema->waiters, &thread_current()->elem,
                          priority_more,NULL);
       thread_block ();
@@ -210,9 +209,9 @@ lock_acquire (struct lock *lock)
   struct thread *current=thread_current();
   if(lock->holder!=NULL && lock->holder->priority < current->priority)
   {
-//    printf("threads %s %s\n", thread_current()->name, lock->holder->name);
     list_insert_ordered(&lock->holder->list_donors, &current->donor_elem, priority_more, NULL);
     thread_current()->wait_lock = lock;
+    lock->holder->priority = current->priority;
     t = lock->holder;
     while(t->wait_lock != NULL && t->wait_lock->holder!=NULL)
     {
@@ -220,10 +219,9 @@ lock_acquire (struct lock *lock)
             {
                   t->wait_lock->holder->priority = t->priority;
                   list_insert_ordered(&t->wait_lock->holder->list_donors, &t->donor_elem, priority_more, NULL);
-                  t = t->wait_lock->holder;
             }
+        t = t->wait_lock->holder;
     }
-    lock->holder->priority = current->priority;
   }
 
   sema_down (&lock->semaphore);
