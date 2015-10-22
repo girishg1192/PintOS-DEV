@@ -108,7 +108,6 @@ timer_sleep (int64_t ticks)
 {
   int64_t start = timer_ticks ();
   int64_t wait_till = start+ticks;
-//  printf("timer.c!! start=%"PRId64", ticks=%"PRId64", wait_till=%"PRId64"\n", start, ticks, wait_till);
   ASSERT (intr_get_level () == INTR_ON);
   if(wait_till>start)
     thread_sleep(wait_till);
@@ -234,23 +233,16 @@ void thread_sleep(int64_t wakeTime)
   struct wait_list *wait_node=(struct wait_list *)malloc(sizeof(struct wait_list));
   ASSERT(wait_node!=NULL);
   
-//  printf("timer.c:wait_node= 0x%x \n", wait_node);
   sema_init(&wait_node->sema,0);
-  
-//  printf("Timer: name=%s \n", thread_name());
-//  printf ("Timer: Sleep till %"PRId64"\n ", wakeTime);
 
 
   wait_node->value=wakeTime;
-//  printf("timer.c thread enter critical %s\n", thread_current()->name);
-  lock_acquire(&critical);
-//  printf("timer.c enter critical\n");
-  list_insert_ordered(&wait_list, &wait_node->elem, wait_time_less, NULL);
-  lock_release(&critical);
-//  list_push_back(&wait_list, &wait_node->elem);
-  sema_down(&wait_node->sema);
 
-//  printf("timer.c thread %s woke up at %"PRId64"!\n", thread_name(), ticks);
+  lock_acquire(&critical);
+  list_insert_ordered(&wait_list, &wait_node->elem, wait_time_less, NULL);
+
+  lock_release(&critical);
+  sema_down(&wait_node->sema);
 
   list_remove(&wait_node->elem);
   free(wait_node);
@@ -263,15 +255,12 @@ void wake_sleeping()
   struct list_elem *looper;
   struct wait_list *wait_ticks;
 
-//  lock_acquire(&critical);
   looper      = list_begin(&wait_list);
-//  lock_release(&critical);
 
   wait_ticks  = list_entry(looper, struct wait_list, elem);
 
   while(wait_ticks->value==ticks)
   {
-//      printf("timer.c waking up sleeping thread sleeping till %"PRId64"\n", ticks);
       sema_up(&wait_ticks->sema);
       looper    = list_next(looper);
       wait_ticks= list_entry(looper, struct wait_list, elem);

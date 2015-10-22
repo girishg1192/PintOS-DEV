@@ -138,13 +138,13 @@ thread_tick (void)
 
   if(thread_mlfqs)
   {
+    if(t != idle_thread)
+      t->recent_cpu = add_to_fp(t->recent_cpu, 1);
     if(timer_ticks() % TIMER_FREQ == 0)
     {
       load_avg_calc();
       recent_cpu_calc();
     }
-    if(t != idle_thread)
-      t->recent_cpu = add_to_fp(t->recent_cpu, 1);
     if(timer_ticks() % 4 == 0)
     {
       thread_recalculate_priority_all();
@@ -707,6 +707,6 @@ void load_avg_calc()
   int ready_threads = list_size(&ready_list);
   if(thread_current() != idle_thread)
     ready_threads++;
-  load_avg = mul_fp_fp(int_to_fp(59)/60,load_avg) + (int_to_fp(1)*ready_threads)/60;
+  load_avg = mul_fp_fp(int_to_fp(59)/60,load_avg) + (int_to_fp(1)/60*ready_threads);
 
 }
