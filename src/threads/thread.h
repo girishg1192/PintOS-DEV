@@ -96,8 +96,8 @@ struct thread
 
     struct lock *wait_lock;             /* Points to the lock that the thread is blocked for*/
     struct list list_donors;            /*  List of all donors to the thread */
-    uint32_t recent_cpu;
-    uint32_t nice;
+    int32_t recent_cpu;
+    int32_t nice;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -111,7 +111,7 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
-uint32_t load_avg;            /*Load average for all ready threads*/
+int32_t load_avg;            /*Load average for all ready threads*/
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

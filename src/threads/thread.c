@@ -431,7 +431,6 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
   int32_t recent_cpu = thread_current()->recent_cpu;
   return fp_to_int(mul_fp_int(recent_cpu,100));
 }
@@ -521,10 +520,21 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
+
+  t->nice=0;        //Initializing Nice and recent CPU for recently created thread
+  t->recent_cpu=0;
+
+  if(thread_mlfqs)    // If mlfqs scheduler is used, calculate priority BSD Scheduler function
+  {
+    thread_recalculate_priority(t);
+  }
+  else
+  {
   t->priority = priority;
   t->old_priority = priority;
-  t->nice=0;
-  t->recent_cpu=0;
+  }
+
+
   t->magic = THREAD_MAGIC;
   list_init(&t->list_donors);
   old_level = intr_disable ();
@@ -662,14 +672,14 @@ void thread_recalculate_priority_all()
   struct list_elem *e;
   for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
     thread_recalculate_priority(list_entry(e, struct thread, allelem));
+  list_sort(&ready_list, priority_more, NULL);
 }
 
 void thread_recalculate_priority(struct thread *t)
 {
   int32_t temp;
-  struct list_elem *thread;
-  temp = div_fp_int(int_to_fp(t->recent_cpu),4) + div_fp_int(int_to_fp(t->nice),2);
-  temp = PRI_MAX - fp_to_int(temp);
+  temp = fp_to_int(t->recent_cpu/4) + 2*t->nice;
+  temp = PRI_MAX - temp;
   if(temp < PRI_MIN)
     temp = PRI_MIN;
   if(temp > PRI_MAX)
@@ -685,9 +695,9 @@ void recent_cpu_calc()
   {
     t = list_entry(e, struct thread, allelem);
     int32_t num = mul_fp_int(load_avg,2);
-    int32_t denominator = add_to_fp(num,1);
+    int32_t denominator = num + int_to_fp(1);
     int32_t a = div_fp_fp(num,denominator);
-    int32_t recent_cpu = mul_fp_int(t->recent_cpu, a);
+    int32_t recent_cpu = mul_fp_fp(t->recent_cpu, a);
     t->recent_cpu = add_to_fp(recent_cpu, t->nice);
   }
 }
@@ -695,8 +705,8 @@ void recent_cpu_calc()
 void load_avg_calc()
 {
   int ready_threads = list_size(&ready_list);
-  if(thread_current != idle_thread)
+  if(thread_current() != idle_thread)
     ready_threads++;
-  load_avg = mul_fp_fp(div_fp_int(int_to_fp(59),60),load_avg) + mul_fp_fp(div_fp_int(int_to_fp(1),60),int_to_fp(ready_threads));
+  load_avg = mul_fp_fp(int_to_fp(59)/60,load_avg) + (int_to_fp(1)*ready_threads)/60;
 
 }
