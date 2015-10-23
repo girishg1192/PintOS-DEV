@@ -120,12 +120,14 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   sema->value++;
-  if (!list_empty (&sema->waiters)) 
+
+  if (!list_empty (&sema->waiters))     /*Remove the highest priority thread*/
   {
     next = list_min(&sema->waiters, priority_more, NULL);
     list_remove(next);
     thread_unblock (list_entry(next, struct thread, elem));
   }
+
   intr_set_level (old_level);
 }
 
@@ -207,18 +209,21 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
   struct thread *current=thread_current();
+
   if(lock->holder!=NULL && lock->holder->priority < current->priority)
   {
     list_insert_ordered(&lock->holder->list_donors, &current->donor_elem, priority_more, NULL);
     thread_current()->wait_lock = lock;
     lock->holder->priority = current->priority;
     t = lock->holder;
-    while(t->wait_lock != NULL && t->wait_lock->holder!=NULL)
+
+    while(t->wait_lock != NULL && t->wait_lock->holder!=NULL)   /*Donate priority to lock holder threads*/
     {
         if(t->wait_lock->holder->priority < t->priority)
             {
                   t->wait_lock->holder->priority = t->priority;
-                  list_insert_ordered(&t->wait_lock->holder->list_donors, &t->donor_elem, priority_more, NULL);
+                  list_insert_ordered(&t->wait_lock->holder->list_donors, 
+                                          &t->donor_elem, priority_more, NULL);
             }
         t = t->wait_lock->holder;
     }
@@ -263,10 +268,19 @@ lock_release (struct lock *lock)
 
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
+  /*
+   * 1. Release locks and release priority donated to the lock
+   *
+   */
+
   if(!list_empty(&lock->holder->list_donors))
   {
     if(!list_empty(&lock->semaphore.waiters))
     {
+      /*
+       * Remove threads from the list of donors
+       */
        for(e = list_begin(&(lock->semaphore.waiters)); e!= list_end(&(lock->semaphore.waiters))
                                          ; e=list_next(e))
            {
@@ -281,6 +295,9 @@ lock_release (struct lock *lock)
                 }
               }
            }
+          /* Set thread priority to either 1. original priority
+           * or 2. Priority of the next waiting donor thread
+           */
           if(!list_empty(&lock->holder->list_donors)) 
           {
                 check = list_max(&lock->holder->list_donors, priority_more, NULL);
@@ -299,6 +316,7 @@ lock_release (struct lock *lock)
           }
     }
  }
+
   lock->holder=NULL;
   sema_up (&lock->semaphore);
 }
