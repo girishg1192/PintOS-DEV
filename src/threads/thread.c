@@ -140,15 +140,18 @@ thread_tick (void)
   {
     if(t != idle_thread)
       t->recent_cpu = add_to_fp(t->recent_cpu, 1);
+
     if(timer_ticks() % TIMER_FREQ == 0)
     {
       load_avg_calc();
       recent_cpu_calc();
     }
+
     if(timer_ticks() % 4 == 0)
     {
       thread_recalculate_priority_all();
     }
+
   }
   
 
@@ -257,7 +260,6 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-//  list_push_back (&ready_list, &t->elem);
   list_insert_ordered(&ready_list, &t->elem, priority_more, NULL);
   t->status = THREAD_READY;
 
@@ -268,9 +270,6 @@ thread_unblock (struct thread *t)
 
   if(current!=idle_thread && current->priority < t->priority)
   {
-//    printf("thread.c preempting thread %s %s\n", thread_current()->name, t->name);
-//    printf("thread.c next thread to run is %s\n",next_thread_to_run()->name);
-//    printf("preempting\n");
     thread_yield();
   }
   //End of preemption.
@@ -402,13 +401,13 @@ thread_set_nice (int nice UNUSED)
 {
   if(!thread_mlfqs) return;
   thread_current()->nice = nice;
-  thread_recalculate_priority(thread_current());
-  if(!list_empty(&ready_list))
-    if(thread_current()->priority < list_entry(list_min(&ready_list, priority_more, NULL), struct thread, elem)->priority)
-  {
-      thread_yield();
-  }
+  thread_recalculate_priority(thread_current());  /* Set nice and recalculate prioriy*/
 
+  if(!list_empty(&ready_list))    /* Yield the thread if the priority is low*/
+    if(thread_current()->priority < list_entry(list_min(&ready_list, priority_more, NULL), struct thread, elem)->priority)
+    {
+      thread_yield();
+    }
 }
 
 /* Returns the current thread's nice value. */
@@ -667,6 +666,14 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+/* Scheduler Functions
+ * thread_recalculate_priority_all() - Recalculates priority for all threads every second
+ * recent_cpu_calc() - Calculate recent_cpu for each thread
+ * load_avg_calc() - Calculate load average
+ */
+
 void thread_recalculate_priority_all()
 {
   struct list_elem *e;

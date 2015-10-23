@@ -91,6 +91,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     int old_priority;                   /* Save old priority in case of donation */
+    
     struct list_elem allelem;           /* List element for all threads list. */
     struct list_elem donor_elem;           /* List element for all threads list. */
 
