@@ -19,7 +19,9 @@
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
-struct list wait_list;
+
+/* Wait list containing all semaphore instances for sleeping thread*/
+struct list wait_list; 
 
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -255,15 +257,18 @@ void wake_sleeping()
   struct list_elem *looper;
   struct wait_list *wait_ticks;
 
-  looper      = list_begin(&wait_list);
-
-  wait_ticks  = list_entry(looper, struct wait_list, elem);
-
-  while(wait_ticks->value==ticks)
+  if(!list_empty(&wait_list))
   {
-      sema_up(&wait_ticks->sema);
-      looper    = list_next(looper);
-      wait_ticks= list_entry(looper, struct wait_list, elem);
+    looper      = list_begin(&wait_list);
+
+    wait_ticks  = list_entry(looper, struct wait_list, elem);
+
+    while(wait_ticks->value==ticks)
+    {
+        sema_up(&wait_ticks->sema);
+        looper    = list_next(looper);
+        wait_ticks= list_entry(looper, struct wait_list, elem);
+    }
   }
   //End of Wake
 }

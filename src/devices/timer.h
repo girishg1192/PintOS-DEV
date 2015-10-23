@@ -29,8 +29,11 @@ void timer_mdelay (int64_t milliseconds);
 void timer_udelay (int64_t microseconds);
 void timer_ndelay (int64_t nanoseconds);
 
-// Avoiding Busy Waits
-//
+/* Avoiding Busy Waits 
+ * Creating a wait_list that puts the thread to sleep, by blocking for a semaphore
+ * on timer_interrupt wake_sleeping() call to wake threads that are to be woken 
+ * up at that timer tick
+ * */
 struct wait_list
 {
   struct semaphore sema;
